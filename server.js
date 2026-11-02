@@ -60,6 +60,7 @@ const restaurantSchema = new mongoose.Schema(
 const Restaurant = mongoose.model('Restaurant', restaurantSchema);
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const menuItemRoutes = require('./routes/menuItemRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 // ==================== CONTROLLERS & ROUTES ====================
 const router = express.Router();
@@ -156,6 +157,7 @@ router.delete('/:id', async (req, res) => {
 
 app.use('/api/restaurants', router);
 app.use('/api/menu-items', menuItemRoutes);
+app.use('/api/auth', authRoutes);
 
 
 app.get('/', (req, res) => {
