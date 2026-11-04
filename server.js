@@ -61,6 +61,8 @@ const Restaurant = mongoose.model('Restaurant', restaurantSchema);
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const menuItemRoutes = require('./routes/menuItemRoutes');
 const authRoutes = require('./routes/authRoutes');
+const cartRoutes = require('./routes/cartRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 // ==================== CONTROLLERS & ROUTES ====================
 const router = express.Router();
@@ -158,7 +160,8 @@ router.delete('/:id', async (req, res) => {
 app.use('/api/restaurants', router);
 app.use('/api/menu-items', menuItemRoutes);
 app.use('/api/auth', authRoutes);
-
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to FoodieGo API - Assignment 2' });

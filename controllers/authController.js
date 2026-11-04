@@ -1,55 +1,23 @@
 
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
-// USER REGISTRATION
+// REGISTER
 const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // Check required fields
-    if (!name || !email || !password) {
+    if (!name || !email || !password || password.length < 8) {
       return res.status(400).json({
         success: false,
-        message: "Name, email and password are required"
+        message: "Valid name, email and password required (minimum 8 characters)"
       });
     }
 
-    // Validate name
-    const cleanName = name.trim();
-
-    if (!cleanName) {
-      return res.status(400).json({
-        success: false,
-        message: "Name cannot be empty"
-      });
-    }
-
-    // Normalize email
     const cleanEmail = email.trim().toLowerCase();
 
-    // Validate email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(cleanEmail)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format"
-      });
-    }
-
-    // Password validation
-    if (password.length < 8 || password.length > 72) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be 8 to 72 characters"
-      });
-    }
-
-    // Check existing user
-    const existingUser = await User.findOne({
-      email: cleanEmail
-    });
+    const existingUser = await User.findOne({ email: cleanEmail });
 
     if (existingUser) {
       return res.status(409).json({
@@ -58,18 +26,16 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Create user (role always customer)
     const user = await User.create({
-      name: cleanName,
+      name: name.trim(),
       email: cleanEmail,
       passwordHash,
       role: "customer"
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       message: "Registration successful",
       user: {
@@ -81,20 +47,195 @@ const registerUser = async (req, res) => {
     });
 
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).json({
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+// LOGIN
+const loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({
+      email: email.trim().toLowerCase()
+    }).select("+passwordHash");
+
+    if (!user || !user.isActive ||
+        !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({
         success: false,
-        message: "Email already registered"
+        message: "Invalid email or password"
       });
     }
+    console.log("JWT Secret loaded:", !!process.env.JWT_SECRET);
+console.log("Login time:", new Date().toISOString());
 
-    console.error("Registration error:", error.message);
+    const token = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
 
-    return res.status(500).json({
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
       success: false,
       message: "Server error"
     });
   }
 };
 
-module.exports = { registerUser };
+
+// GET ALL USERS
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find().select("-passwordHash");
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      users
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+
+// GET USER BY ID
+const getUserById = async (req, res) => {
+  try {
+const user = await User.findById(req.params.id).select("-passwordHash");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user
+    });
+
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid user ID"
+    });
+  }
+};
+
+
+// GET PROFILE
+const getUserProfile = async (req, res) => {
+  try {
+const user = await User.findById(req.user.userId).select("-passwordHash");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+
+// UPDATE PROFILE
+const updateUserProfile = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid name required"
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { name: name.trim() },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+
+// DELETE USER
+const deleteUser = async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User deleted successfully"
+    });
+
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid user ID"
+    });
+  }
+};
+
+
+module.exports = {
+  registerUser,
+  loginUser,
+  getAllUsers,
+  getUserById,
+  getUserProfile,
+  updateUserProfile,
+  deleteUser
+};
